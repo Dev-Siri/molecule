@@ -1,39 +1,49 @@
 use std::io::Write;
 
 use anyhow::Result;
-use colored::*;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
+use tokio::signal;
 
+use crate::molecule::Molecule;
 use crate::proto::InputType;
 
-pub async fn run(addr: &str) -> Result<()> {
-    println!("{} molecule", "[INFO]".blue());
-    println!("{} Database is running on tcp://{}", "[INFO]".blue(), addr);
+pub trait MoleculeCliApi {
+    async fn start_cli(&self) -> Result<()>;
+}
 
-    let mut reader = BufReader::new(tokio::io::stdin());
-    let mut input = String::new();
+impl MoleculeCliApi for Molecule {
+    async fn start_cli(&self) -> Result<()> {
+        log::info!("Database is running on tcp://{}:{}", self.addr, self.port);
 
-    loop {
-        input.clear();
-        print!("> ");
-        std::io::stdout().flush()?;
+        let mut reader = BufReader::new(tokio::io::stdin());
+        let mut input = String::new();
 
-        reader.read_line(&mut input).await?;
-        let trimmed = input.trim();
-        let parsed_input = match InputType::try_from(trimmed) {
-            Ok(pinput) => pinput,
-            Err(err) => {
-                println!("{}", err.to_string());
-                continue;
+        loop {
+            input.clear();
+            print!("> ");
+            std::io::stdout().flush()?;
+
+            tokio::select! {
+                Ok(_) = reader.read_line(&mut input) => {
+                    let trimmed = input.trim();
+                    let parsed_input = match InputType::try_from(trimmed) {
+                        Ok(pinput) => pinput,
+                        Err(err) => {
+                            println!("{}", err.to_string());
+                            continue;
+                        }
+                    };
+
+                    if matches!(parsed_input, InputType::Stop) {
+                        break;
+                    }
+                },
+                _ = signal::ctrl_c() => break,
             }
-        };
-
-        if matches!(parsed_input, InputType::Stop) {
-            break;
         }
-    }
 
-    println!("{} Gracefully shutting down...", "[INFO]".blue());
-    Ok(())
+        log::info!("Gracefully shutting down...");
+        Ok(())
+    }
 }
