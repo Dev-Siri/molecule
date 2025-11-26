@@ -1,11 +1,16 @@
 use std::process;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Parser;
+use tokio::fs;
 
+use crate::auth::MoleculeAuthApi;
 use crate::cli::MoleculeCliApi;
-use crate::constants::{MOLECULE_DEFAULT_ADDR, MOLECULE_DEFAULT_PORT};
+use crate::constants::{
+    MOLECULE_DEFAULT_ADDR, MOLECULE_DEFAULT_DATA_PATH, MOLECULE_DEFAULT_PORT,
+    MOLECULE_DOT_FILE_PATH,
+};
 use crate::tcp::MoleculeTcpApi;
 use crate::{args::Args, molecule::Molecule};
 
@@ -29,8 +34,7 @@ async fn main() -> Result<()> {
 
 async fn run() -> Result<()> {
     let args = Args::parse();
-    let addr = args.addr.unwrap_or(MOLECULE_DEFAULT_ADDR.to_string());
-    let port = args.port.unwrap_or(MOLECULE_DEFAULT_PORT);
+    let data = args.data.unwrap_or(MOLECULE_DEFAULT_DATA_PATH.to_string());
 
     if args.enable_logging {
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("molecule"))
@@ -38,8 +42,29 @@ async fn run() -> Result<()> {
         log::info!("Logging enabled.");
     }
 
-    let molecule = Molecule::new(addr, port);
+    if !fs::try_exists(&data).await? {
+        fs::create_dir_all(&data).await?;
+    }
+
+    if !fs::try_exists(MOLECULE_DOT_FILE_PATH).await? {
+        fs::create_dir_all(MOLECULE_DOT_FILE_PATH).await?;
+    }
+
+    let addr = args.addr.unwrap_or(MOLECULE_DEFAULT_ADDR.to_string());
+    let port = args.port.unwrap_or(MOLECULE_DEFAULT_PORT);
+
+    let molecule = Molecule::new(addr, port, data);
     let shared_molecule = Arc::new(molecule);
+
+    if let Some(auth_str) = args.auth {
+        let Some((username, password)) = auth_str.split_once(":") else {
+            bail!("Could not parse auth string for username and password.")
+        };
+
+        shared_molecule
+            .setup_user(username.to_owned(), password.to_owned())
+            .await?;
+    }
 
     let server_handle = shared_molecule.clone();
     tokio::spawn(async move {

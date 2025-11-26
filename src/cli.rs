@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::process;
 
 use anyhow::Result;
 use tokio::io::AsyncBufReadExt;
@@ -6,7 +7,9 @@ use tokio::io::BufReader;
 use tokio::signal;
 
 use crate::molecule::Molecule;
-use crate::proto::InputType;
+use crate::proto::DatabaseInputType;
+use crate::proto::InputSource;
+use crate::proto::parse_str_to_db_input_type;
 
 pub trait MoleculeCliApi {
     async fn start_cli(&self) -> Result<()>;
@@ -27,7 +30,7 @@ impl MoleculeCliApi for Molecule {
             tokio::select! {
                 Ok(_) = reader.read_line(&mut input) => {
                     let trimmed = input.trim();
-                    let parsed_input = match InputType::try_from(trimmed) {
+                    let parsed_input = match parse_str_to_db_input_type(trimmed, InputSource::Cli) {
                         Ok(pinput) => pinput,
                         Err(err) => {
                             println!("{}", err.to_string());
@@ -35,15 +38,16 @@ impl MoleculeCliApi for Molecule {
                         }
                     };
 
-                    if matches!(parsed_input, InputType::Stop) {
-                        break;
-                    }
+                    match parsed_input {
+                        DatabaseInputType::Stop => break,
+                        DatabaseInputType::Noop => log::info!("Received empty (noop) operation."),
+                    };
                 },
                 _ = signal::ctrl_c() => break,
             }
         }
 
         log::info!("Gracefully shutting down...");
-        Ok(())
+        process::exit(0);
     }
 }
