@@ -1,1 +1,81 @@
-# molecule
+# `molecule`
+
+Molecule is a database that is document-oriented, similar to MongoDB, written in Rust. It provides a CLI interface and a TCP API to interact with it, create records, collections. However, privileged level operations like stopping the database entirely can only be done through the CLI.
+
+## Usage
+
+For CLI use:
+
+```sh
+# Check out the available arguments.
+$ molecule --help
+```
+
+## Protocol
+
+`molecule` communicates with external clients over TCP. It has custom messages you can send it to interact with the database.
+
+### Handshake
+
+To initiate a successful handshake, `molecule` will send you a `INITCONN` message. Now, your client needs to send `OK`, and depending on if you have setup auth on the database, you will need to pass an auth string with the `OK`, as in `OK username:password`.
+
+If everything goes successfully, `molecule` will send back a `READY` response, completing the handshake. Going forward, you can use database commands.
+
+The whole handshake may look something like this:
+
+```
+------------HANDSHAKE START------------
+
+               "INITCONN"
+1. TCP Client      <-      molecule
+
+            "OK admin:hunter2"
+2. TCP Client      ->      molecule
+
+                 "READY"
+3. TCP Client      <-      molecule
+
+-----------HANDSHAKE COMPLETE-----------
+```
+
+### Inputs
+
+Quick list of all the possible database input messages:
+
+- `COLLECTIONS_LIST`: List all collections.
+- `COLLECTION <collection_id>`: Get the name of a collection referenced by it's ID.
+- `CLN_GET <collection_id>`: Get a JSON record from a collection referenced by the collection's ID.
+- `REC_GET <collection_id> <record_id>`: Get a specific JSON record referenced by the record's ID (`_id`) from a collection referenced by the collection's ID.
+
+### Errors
+
+For specific errors, you can check the [`proto.rs`](src/proto.rs) file. Errors are always sent as:
+
+```
+ERR type_of_error
+```
+
+#### Example
+
+```
+ERR incorrect_auth_info
+```
+
+## Getting Started
+
+Clone the repository.
+
+```sh
+$ git clone https://github.com/Dev-Siri/molecule
+```
+
+Make sure you have the Rust toolchain setup.
+Then you can simply run the following to build a release version:
+
+```sh
+$ cargo build --release
+```
+
+## License
+
+This project is [MIT](LICENSE) licensed.
