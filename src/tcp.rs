@@ -8,6 +8,7 @@ use tokio::net::TcpStream;
 
 use crate::auth::MoleculeAuthApi;
 use crate::core::collection::MoleculeCoreCollectionApi;
+use crate::core::record::MoleculeCoreRecordsApi;
 use crate::molecule::Molecule;
 use crate::proto::DatabaseInputType;
 use crate::proto::DatabaseOutputError;
@@ -135,7 +136,19 @@ impl MoleculeTcpHandle for Molecule {
             DatabaseInputType::Collection(collection_id) => {
                 let collection = self.get_collection_name(collection_id).await?;
 
-                DatabaseOutputMsg::Collection(collection.unwrap_or("<null>".into()))
+                DatabaseOutputMsg::Collection(collection.unwrap_or("null".into()))
+            }
+            DatabaseInputType::CollectionRecords(collection_id) => {
+                let records = self.get_records(collection_id).await?;
+                let json_str = serde_json::to_string(&records)?;
+
+                DatabaseOutputMsg::Records(json_str)
+            }
+            DatabaseInputType::IdRecord(collection_id, record_id) => {
+                let record = self.get_record_by_id(collection_id, record_id).await?;
+                let json_str = serde_json::to_string(&record)?;
+
+                DatabaseOutputMsg::Records(json_str)
             }
             DatabaseInputType::Noop => DatabaseOutputMsg::Noop,
             DatabaseInputType::Stop => DatabaseOutputMsg::Err(DatabaseOutputError::CmdNotAvailable),

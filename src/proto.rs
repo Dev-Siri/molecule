@@ -17,6 +17,10 @@ pub enum DatabaseInputType {
     CollectionsList,
     /// Get collection name from ID.
     Collection(String),
+    /// Get records of a collection by the collection ID.
+    CollectionRecords(String),
+    /// Get record of a collection (referenced by collection_id) by the record ID.
+    IdRecord(String, String),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -27,6 +31,8 @@ pub enum DatabaseOutputMsg {
     Collections(String),
     /// Collections(Name of collection)
     Collection(String),
+    /// Records(Stringified JSON of the records)
+    Records(String),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -111,6 +117,7 @@ impl DatabaseOutputMsg {
             Self::Err(err) => err.as_str().as_bytes().to_vec(),
             Self::Collections(collection) => collection.as_bytes().to_vec(),
             Self::Collection(collection_name) => collection_name.as_bytes().to_vec(),
+            Self::Records(records) => records.as_bytes().to_vec(),
         }
     }
 }
@@ -148,7 +155,26 @@ pub fn parse_str_to_db_input_type(value: String, source: InputSource) -> Result<
                 return Ok(DatabaseInputType::Collection(collection_id.to_string()));
             }
 
-            bail!("Input type COLLECTION is missing required argument of collection_id");
+            bail!("Input type COLLECTION is missing required argument for collection_id.");
+        }
+        "CLN_GET" => {
+            if let Some(collection_id) = parts.get(1) {
+                return Ok(DatabaseInputType::CollectionRecords(
+                    collection_id.to_string(),
+                ));
+            }
+
+            bail!("Input type CLN_GET is missing required argument for collection_id.");
+        }
+        "REC_GET" => {
+            if let (Some(collection_id), Some(record_id)) = (parts.get(1), parts.get(2)) {
+                return Ok(DatabaseInputType::IdRecord(
+                    collection_id.to_string(),
+                    record_id.to_string(),
+                ));
+            }
+
+            bail!("Input type REC_GET is missing required argument for record_id.");
         }
         _ => bail!(
             "Invalid or unsupported input type for {}: {}",

@@ -36,7 +36,6 @@ async fn main() -> Result<()> {
 
 async fn run() -> Result<()> {
     let args = Args::parse();
-    let data = args.data.unwrap_or(MOLECULE_DEFAULT_DATA_PATH.to_string());
 
     if args.enable_logging {
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("molecule"))
@@ -44,8 +43,8 @@ async fn run() -> Result<()> {
         log::info!("Logging enabled.");
     }
 
-    if !fs::try_exists(&data).await? {
-        fs::create_dir_all(&data).await?;
+    if !fs::try_exists(MOLECULE_DEFAULT_DATA_PATH).await? {
+        fs::create_dir_all(MOLECULE_DEFAULT_DATA_PATH).await?;
     }
 
     if !fs::try_exists(MOLECULE_DOT_FILE_PATH).await? {
@@ -63,7 +62,7 @@ async fn run() -> Result<()> {
     let addr = args.addr.unwrap_or(MOLECULE_DEFAULT_ADDR.to_string());
     let port = args.port.unwrap_or(MOLECULE_DEFAULT_PORT);
 
-    let molecule = Molecule::new(addr, port, data);
+    let molecule = Molecule::new(addr, port);
     let shared_molecule = Arc::new(molecule);
 
     if let Some(auth_str) = args.auth {

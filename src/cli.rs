@@ -7,6 +7,7 @@ use tokio::io::BufReader;
 use tokio::signal;
 
 use crate::core::collection::MoleculeCoreCollectionApi;
+use crate::core::record::MoleculeCoreRecordsApi;
 use crate::molecule::Molecule;
 use crate::proto::DatabaseInputType;
 use crate::proto::InputSource;
@@ -59,6 +60,24 @@ impl MoleculeCliApi for Molecule {
                                 println!("No collection found with that ID.");
                             }
                         },
+                        DatabaseInputType::CollectionRecords(collection_id) => {
+                            let records = self.get_records(collection_id).await?;
+
+                            if records.is_empty() {
+                                println!("No records in collection.");
+                            }
+
+                            for record in records {
+                                println!("{}", serde_json::to_string_pretty(&record)?);
+                            }
+                        },
+                        DatabaseInputType::IdRecord(collection_id, record_id) => {
+                            if let Some(record) = self.get_record_by_id(collection_id, record_id).await? {
+                                println!("{}", serde_json::to_string_pretty(&record)?);
+                            } else {
+                                println!("No record found in collection with the specified ID.");
+                            }
+                        }
                         DatabaseInputType::Noop => log::info!("Received empty (noop) operation."),
                     };
                 },
