@@ -8,7 +8,8 @@ use tokio::fs;
 use crate::auth::MoleculeAuthApi;
 use crate::cli::MoleculeCliApi;
 use crate::constants::{
-    MOLECULE_DEFAULT_ADDR, MOLECULE_DEFAULT_DATA_PATH, MOLECULE_DEFAULT_PORT,
+    MOLECULE_DEFAULT_ADDR, MOLECULE_DEFAULT_DATA_COLLECTION_META_PATH,
+    MOLECULE_DEFAULT_DATA_COLLECTIONS_PATH, MOLECULE_DEFAULT_DATA_PATH, MOLECULE_DEFAULT_PORT,
     MOLECULE_DOT_FILE_PATH,
 };
 use crate::tcp::MoleculeTcpApi;
@@ -18,6 +19,7 @@ mod args;
 mod auth;
 mod cli;
 mod constants;
+mod core;
 mod molecule;
 mod proto;
 mod tcp;
@@ -48,6 +50,14 @@ async fn run() -> Result<()> {
 
     if !fs::try_exists(MOLECULE_DOT_FILE_PATH).await? {
         fs::create_dir_all(MOLECULE_DOT_FILE_PATH).await?;
+    }
+
+    if !fs::try_exists(MOLECULE_DEFAULT_DATA_COLLECTIONS_PATH).await? {
+        fs::create_dir_all(MOLECULE_DEFAULT_DATA_COLLECTIONS_PATH).await?;
+    }
+
+    if !fs::try_exists(MOLECULE_DEFAULT_DATA_COLLECTION_META_PATH).await? {
+        fs::write(MOLECULE_DEFAULT_DATA_COLLECTION_META_PATH, b"[]").await?;
     }
 
     let addr = args.addr.unwrap_or(MOLECULE_DEFAULT_ADDR.to_string());

@@ -13,6 +13,26 @@ pub enum DatabaseInputType {
     Stop,
     /// Do nothing, empty request.
     Noop,
+    /// List all collections in the database.
+    CollectionsList,
+    /// Get collection name from ID.
+    Collection(String),
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum DatabaseOutputMsg {
+    Noop,
+    Err(DatabaseOutputError),
+    /// Collections(Stringified JSON of the collections)
+    Collections(String),
+    /// Collections(Name of collection)
+    Collection(String),
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum DatabaseOutputError {
+    InvalidInput,
+    CmdNotAvailable,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -75,6 +95,26 @@ impl<'a> Into<&'a [u8]> for HandShakeOutputMsg {
     }
 }
 
+impl DatabaseOutputError {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::InvalidInput => "ERR invalid_input\n",
+            Self::CmdNotAvailable => "ERR cmd_not_available",
+        }
+    }
+}
+
+impl DatabaseOutputMsg {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            Self::Noop => Vec::new(),
+            Self::Err(err) => err.as_str().as_bytes().to_vec(),
+            Self::Collections(collection) => collection.as_bytes().to_vec(),
+            Self::Collection(collection_name) => collection_name.as_bytes().to_vec(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum InputSource {
     Cli,
@@ -90,8 +130,8 @@ impl InputSource {
     }
 }
 
-pub fn parse_str_to_db_input_type(value: &str, source: InputSource) -> Result<DatabaseInputType> {
-    if value == "stop" && source != InputSource::Tcp {
+pub fn parse_str_to_db_input_type(value: String, source: InputSource) -> Result<DatabaseInputType> {
+    if value == "STOP" && source != InputSource::Tcp {
         return Ok(DatabaseInputType::Stop);
     }
 
@@ -101,9 +141,19 @@ pub fn parse_str_to_db_input_type(value: &str, source: InputSource) -> Result<Da
         None => return Ok(DatabaseInputType::Noop),
     };
 
-    bail!(
-        "Invalid or unsupported input type for {}: {}",
-        source.as_str(),
-        value
-    );
+    match command {
+        "COLLECTIONS_LIST" => Ok(DatabaseInputType::CollectionsList),
+        "COLLECTION" => {
+            if let Some(collection_id) = parts.get(1) {
+                return Ok(DatabaseInputType::Collection(collection_id.to_string()));
+            }
+
+            bail!("Input type COLLECTION is missing required argument of collection_id");
+        }
+        _ => bail!(
+            "Invalid or unsupported input type for {}: {}",
+            source.as_str(),
+            value
+        ),
+    }
 }

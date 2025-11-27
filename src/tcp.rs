@@ -7,10 +7,16 @@ use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 
 use crate::auth::MoleculeAuthApi;
+use crate::core::collection::MoleculeCoreCollectionApi;
 use crate::molecule::Molecule;
+use crate::proto::DatabaseInputType;
+use crate::proto::DatabaseOutputError;
+use crate::proto::DatabaseOutputMsg;
 use crate::proto::HandShakeInputMsg;
 use crate::proto::HandShakeOutputError;
 use crate::proto::HandShakeOutputMsg;
+use crate::proto::InputSource;
+use crate::proto::parse_str_to_db_input_type;
 
 trait MoleculeTcpHandle {
     async fn handshake(&self, client: &mut TcpStream) -> Result<()>;
@@ -18,7 +24,12 @@ trait MoleculeTcpHandle {
 }
 
 trait MoleculeTcpExt {
-    async fn write_err(
+    async fn write_db_err(
+        &self,
+        client: &mut TcpStream,
+        database_output_error: DatabaseOutputError,
+    ) -> Result<()>;
+    async fn write_handshake_err(
         &self,
         client: &mut TcpStream,
         handshake_output_error: HandShakeOutputError,
@@ -62,25 +73,25 @@ impl MoleculeTcpHandle for Molecule {
 
         let incoming_parts: Vec<&str> = incoming.split_whitespace().collect();
         let Some(&raw_message) = incoming_parts.get(0) else {
-            self.write_err(client, HandShakeOutputError::MalformedRequest)
+            self.write_handshake_err(client, HandShakeOutputError::MalformedRequest)
                 .await?;
             return Ok(());
         };
         let message = match HandShakeInputMsg::try_from(raw_message) {
             Ok(parsed_msg) => parsed_msg,
-            Err(err) => return Ok(self.write_err(client, err).await?),
+            Err(err) => return Ok(self.write_handshake_err(client, err).await?),
         };
 
         if let Some(auth_str) = incoming_parts.get(1) {
             let Some((username, password)) = auth_str.split_once(":") else {
                 return Ok(self
-                    .write_err(client, HandShakeOutputError::MalformedAuthStr)
+                    .write_handshake_err(client, HandShakeOutputError::MalformedAuthStr)
                     .await?);
             };
 
             if !self.is_valid_user(username, password).await? {
                 return Ok(self
-                    .write_err(client, HandShakeOutputError::IncorrectAuthInfo)
+                    .write_handshake_err(client, HandShakeOutputError::IncorrectAuthInfo)
                     .await?);
             };
 
@@ -89,7 +100,7 @@ impl MoleculeTcpHandle for Molecule {
 
         if message != HandShakeInputMsg::Ok {
             return Ok(self
-                .write_err(client, HandShakeOutputError::InvalidHandShake)
+                .write_handshake_err(client, HandShakeOutputError::InvalidHandShake)
                 .await?);
         }
 
@@ -100,9 +111,37 @@ impl MoleculeTcpHandle for Molecule {
     async fn handle_client(&self, client: &mut TcpStream) -> Result<()> {
         self.handshake(client).await?;
         let mut buf: Vec<u8> = vec![0u8; 1024];
-        let buf_size = client.read(&mut buf).await?;
+        let size = client.read(&mut buf).await?;
 
-        client.write_all(&buf[..buf_size]).await?;
+        let incoming_db_cmd = String::from_utf8_lossy(&buf[..size]).trim().to_string();
+        log::info!("Database command: {}", incoming_db_cmd);
+
+        let input = match parse_str_to_db_input_type(incoming_db_cmd, InputSource::Tcp) {
+            Ok(parsed) => parsed,
+            Err(_) => {
+                return Ok(self
+                    .write_db_err(client, DatabaseOutputError::InvalidInput)
+                    .await?);
+            }
+        };
+
+        let response = match input {
+            DatabaseInputType::CollectionsList => {
+                let collections = self.list_collections().await?;
+                let json_str = serde_json::to_string(&collections)?;
+
+                DatabaseOutputMsg::Collections(json_str)
+            }
+            DatabaseInputType::Collection(collection_id) => {
+                let collection = self.get_collection_name(collection_id).await?;
+
+                DatabaseOutputMsg::Collection(collection.unwrap_or("<null>".into()))
+            }
+            DatabaseInputType::Noop => DatabaseOutputMsg::Noop,
+            DatabaseInputType::Stop => DatabaseOutputMsg::Err(DatabaseOutputError::CmdNotAvailable),
+        };
+
+        client.write_all(&response.to_bytes()).await?;
 
         Ok(())
     }
@@ -110,7 +149,7 @@ impl MoleculeTcpHandle for Molecule {
 
 impl MoleculeTcpExt for Molecule {
     #[inline]
-    async fn write_err(
+    async fn write_handshake_err(
         &self,
         client: &mut TcpStream,
         handshake_output_error: HandShakeOutputError,
@@ -118,6 +157,19 @@ impl MoleculeTcpExt for Molecule {
         log::error!("Handshake error: {}", handshake_output_error.as_str());
         client
             .write_all(HandShakeOutputMsg::Err(handshake_output_error).into())
+            .await?;
+        Ok(())
+    }
+
+    #[inline]
+    async fn write_db_err(
+        &self,
+        client: &mut TcpStream,
+        database_output_error: DatabaseOutputError,
+    ) -> Result<()> {
+        log::error!("Database error: {}", database_output_error.as_str());
+        client
+            .write_all(&DatabaseOutputMsg::Err(database_output_error).to_bytes())
             .await?;
         Ok(())
     }

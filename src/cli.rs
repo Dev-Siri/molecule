@@ -6,6 +6,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::signal;
 
+use crate::core::collection::MoleculeCoreCollectionApi;
 use crate::molecule::Molecule;
 use crate::proto::DatabaseInputType;
 use crate::proto::InputSource;
@@ -30,7 +31,7 @@ impl MoleculeCliApi for Molecule {
             tokio::select! {
                 Ok(_) = reader.read_line(&mut input) => {
                     let trimmed = input.trim();
-                    let parsed_input = match parse_str_to_db_input_type(trimmed, InputSource::Cli) {
+                    let parsed_input = match parse_str_to_db_input_type(trimmed.to_string(), InputSource::Cli) {
                         Ok(pinput) => pinput,
                         Err(err) => {
                             println!("{}", err.to_string());
@@ -40,6 +41,24 @@ impl MoleculeCliApi for Molecule {
 
                     match parsed_input {
                         DatabaseInputType::Stop => break,
+                        DatabaseInputType::CollectionsList => {
+                            let collections = self.list_collections().await?;
+
+                            if collections.is_empty() {
+                                println!("No collections to list.");
+                            }
+
+                            for collection in collections {
+                                println!("{}({})", collection.name, collection.collection_id);
+                            }
+                        },
+                        DatabaseInputType::Collection(collection_id) => {
+                            if let Some(collection) = self.get_collection_name(collection_id).await? {
+                                println!("{}", collection);
+                            } else {
+                                println!("No collection found with that ID.");
+                            }
+                        },
                         DatabaseInputType::Noop => log::info!("Received empty (noop) operation."),
                     };
                 },
