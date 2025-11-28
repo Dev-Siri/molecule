@@ -155,8 +155,16 @@ impl MoleculeTcpHandle for Molecule {
                 DatabaseOutputMsg::CreatedCollection(collection_id)
             }
             DatabaseInputType::CreateRecord(collection_id, contents) => {
-                let collection_id = self.create_record(collection_id, contents).await?;
-                DatabaseOutputMsg::CreatedRecord(collection_id)
+                let record_id = self.create_record(collection_id, contents).await?;
+                DatabaseOutputMsg::CreatedRecord(record_id)
+            }
+            DatabaseInputType::DeleteCollection(name) => {
+                let collection_id = self.delete_collection(name).await?;
+                DatabaseOutputMsg::DeletedCollection(collection_id)
+            }
+            DatabaseInputType::DeleteRecord(collection_id, record_id) => {
+                let record_id = self.delete_record(collection_id, record_id).await?;
+                DatabaseOutputMsg::DeletedRecord(record_id)
             }
             DatabaseInputType::Noop => DatabaseOutputMsg::Noop,
             DatabaseInputType::Stop => DatabaseOutputMsg::Err(DatabaseOutputError::CmdNotAvailable),

@@ -17,6 +17,7 @@ pub struct Collection {
 }
 
 pub trait MoleculeCoreCollectionApi {
+    async fn delete_collection(&self, collection_id: String) -> Result<String>;
     async fn create_collection(&self, name: String) -> Result<String>;
     async fn list_collections(&self) -> Result<Vec<Collection>>;
     async fn get_collection_name(&self, collection_id: String) -> Result<Option<String>>;
@@ -60,7 +61,31 @@ impl MoleculeCoreCollectionApi for Molecule {
             serde_json::to_vec(&meta_contents)?,
         )
         .await?;
+        log::info!("Created collection with ID: {}", collection_id);
 
+        Ok(collection_id)
+    }
+
+    async fn delete_collection(&self, collection_id: String) -> Result<String> {
+        let collection_path = format!(
+            "{}/{}.json",
+            MOLECULE_DEFAULT_DATA_COLLECTIONS_PATH, collection_id
+        );
+        let collections = self.list_collections().await?;
+        let updated_collections = collections
+            .iter()
+            .map(|c| c.collection_id != collection_id)
+            .collect::<Vec<_>>();
+
+        fs::write(
+            MOLECULE_DEFAULT_DATA_COLLECTION_META_PATH,
+            serde_json::to_vec(&updated_collections)?,
+        )
+        .await?;
+
+        fs::remove_file(collection_path).await?;
+
+        log::info!("Deleted collection with ID: {}", collection_id);
         Ok(collection_id)
     }
 }

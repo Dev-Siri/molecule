@@ -10,6 +10,7 @@ use crate::{constants::MOLECULE_DEFAULT_DATA_COLLECTIONS_PATH, molecule::Molecul
 pub type Record = HashMap<String, Value>;
 
 pub trait MoleculeCoreRecordsApi {
+    async fn delete_record(&self, collection_id: String, record_id: String) -> Result<String>;
     async fn create_record(
         &self,
         collection_id: String,
@@ -79,8 +80,26 @@ impl MoleculeCoreRecordsApi for Molecule {
 
         records.push(record);
 
+        log::info!("Created record with ID: {}", record_id);
         fs::write(collection_path, serde_json::to_vec(&records)?).await?;
 
         Ok(record_id.to_string())
+    }
+
+    async fn delete_record(&self, collection_id: String, record_id: String) -> Result<String> {
+        let collection_path = format!(
+            "{}/{}.json",
+            MOLECULE_DEFAULT_DATA_COLLECTIONS_PATH, collection_id
+        );
+        let records = self.get_records(collection_id).await?;
+        let updated_records = records
+            .iter()
+            .map(|r| r.get("_id").unwrap_or_default().as_str() != Some(&record_id))
+            .collect::<Vec<_>>();
+
+        fs::write(collection_path, serde_json::to_vec(&updated_records)?).await?;
+
+        log::info!("Deleted record with ID: {}", record_id);
+        Ok(record_id)
     }
 }

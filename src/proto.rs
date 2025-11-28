@@ -28,6 +28,10 @@ pub enum DatabaseInputType {
     CreateCollection(String),
     /// Create a record in a specific collection (referenced by collection_id) with contents.
     CreateRecord(String, HashMap<String, Value>),
+    /// Delete a collection referenced by it's collection ID.
+    DeleteCollection(String),
+    /// Delete a record in a specific collection (referenced by collection_id) with it's record ID.
+    DeleteRecord(String, String),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -42,8 +46,12 @@ pub enum DatabaseOutputMsg {
     Records(String),
     /// CreatedCollection(ID of the collection)
     CreatedCollection(String),
-    /// CreatedCollection(ID of the collection)
+    /// CreatedRecord(ID of the record)
     CreatedRecord(String),
+    /// DeletedCollection(ID of the collection)
+    DeletedCollection(String),
+    /// DeletedRecord(ID of the record)
+    DeletedRecord(String),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -131,6 +139,8 @@ impl DatabaseOutputMsg {
             Self::Records(records) => records.as_bytes().to_vec(),
             Self::CreatedCollection(collection_id) => collection_id.as_bytes().to_vec(),
             Self::CreatedRecord(record_id) => record_id.as_bytes().to_vec(),
+            Self::DeletedCollection(collection_id) => collection_id.as_bytes().to_vec(),
+            Self::DeletedRecord(record_id) => record_id.as_bytes().to_vec(),
         }
     }
 }
@@ -187,7 +197,7 @@ pub fn parse_str_to_db_input_type(value: String, source: InputSource) -> Result<
                 ));
             }
 
-            bail!("Input type REC_GET is missing required argument for record_id.");
+            bail!("Input type REC_GET is missing required argument for collection_id, record_id.");
         }
         "CLN_CREATE" => {
             if let Some(name) = parts.get(1) {
@@ -204,7 +214,30 @@ pub fn parse_str_to_db_input_type(value: String, source: InputSource) -> Result<
                 ));
             }
 
-            bail!("Input type REC_CREATE is missing required argument for name.");
+            bail!(
+                "Input type REC_CREATE is missing required argument for collection_id, contents."
+            );
+        }
+        "CLN_DELETE" => {
+            if let Some(collection_id) = parts.get(1) {
+                return Ok(DatabaseInputType::DeleteCollection(
+                    collection_id.to_string(),
+                ));
+            }
+
+            bail!("Input type CLN_DELETE is missing required argument for collection_id.");
+        }
+        "REC_DELETE" => {
+            if let (Some(collection_id), Some(record_id)) = (parts.get(1), parts.get(2)) {
+                return Ok(DatabaseInputType::DeleteRecord(
+                    collection_id.to_string(),
+                    record_id.to_string(),
+                ));
+            }
+
+            bail!(
+                "Input type REC_DELETE is missing required argument for collection_id, record_id."
+            );
         }
         _ => bail!(
             "Invalid or unsupported input type for {}: {}",
