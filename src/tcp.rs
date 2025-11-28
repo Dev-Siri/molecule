@@ -150,6 +150,14 @@ impl MoleculeTcpHandle for Molecule {
 
                 DatabaseOutputMsg::Records(json_str)
             }
+            DatabaseInputType::CreateCollection(name) => {
+                let collection_id = self.create_collection(name).await?;
+                DatabaseOutputMsg::CreatedCollection(collection_id)
+            }
+            DatabaseInputType::CreateRecord(collection_id, contents) => {
+                let collection_id = self.create_record(collection_id, contents).await?;
+                DatabaseOutputMsg::CreatedRecord(collection_id)
+            }
             DatabaseInputType::Noop => DatabaseOutputMsg::Noop,
             DatabaseInputType::Stop => DatabaseOutputMsg::Err(DatabaseOutputError::CmdNotAvailable),
         };

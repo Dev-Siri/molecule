@@ -71,6 +71,14 @@ impl MoleculeCliApi for Molecule {
                                 println!("{}", serde_json::to_string_pretty(&record)?);
                             }
                         },
+                        DatabaseInputType::CreateCollection(name) => {
+                            let collection_id = self.create_collection(name).await?;
+                            println!("Created collection with ID: {}", collection_id);
+                        },
+                        DatabaseInputType::CreateRecord(collection_id, contents) => {
+                            let record_id = self.create_record(collection_id, contents).await?;
+                            println!("Created record with ID: {}", record_id);
+                        },
                         DatabaseInputType::IdRecord(collection_id, record_id) => {
                             if let Some(record) = self.get_record_by_id(collection_id, record_id).await? {
                                 println!("{}", serde_json::to_string_pretty(&record)?);

@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthInfo {
@@ -7,7 +10,7 @@ pub struct AuthInfo {
     pub password: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum DatabaseInputType {
     /// Gracefully shutdown the database.
     Stop,
@@ -21,6 +24,10 @@ pub enum DatabaseInputType {
     CollectionRecords(String),
     /// Get record of a collection (referenced by collection_id) by the record ID.
     IdRecord(String, String),
+    /// Create a collection with a provided collection_name.
+    CreateCollection(String),
+    /// Create a record in a specific collection (referenced by collection_id) with contents.
+    CreateRecord(String, HashMap<String, Value>),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -33,6 +40,10 @@ pub enum DatabaseOutputMsg {
     Collection(String),
     /// Records(Stringified JSON of the records)
     Records(String),
+    /// CreatedCollection(ID of the collection)
+    CreatedCollection(String),
+    /// CreatedCollection(ID of the collection)
+    CreatedRecord(String),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -118,6 +129,8 @@ impl DatabaseOutputMsg {
             Self::Collections(collection) => collection.as_bytes().to_vec(),
             Self::Collection(collection_name) => collection_name.as_bytes().to_vec(),
             Self::Records(records) => records.as_bytes().to_vec(),
+            Self::CreatedCollection(collection_id) => collection_id.as_bytes().to_vec(),
+            Self::CreatedRecord(record_id) => record_id.as_bytes().to_vec(),
         }
     }
 }
@@ -175,6 +188,23 @@ pub fn parse_str_to_db_input_type(value: String, source: InputSource) -> Result<
             }
 
             bail!("Input type REC_GET is missing required argument for record_id.");
+        }
+        "CLN_CREATE" => {
+            if let Some(name) = parts.get(1) {
+                return Ok(DatabaseInputType::CreateCollection(name.to_string()));
+            }
+
+            bail!("Input type CLN_CREATE is missing required argument for name.");
+        }
+        "REC_CREATE" => {
+            if let (Some(collection_id), content) = (parts.get(1), parts[2..].join(" ")) {
+                return Ok(DatabaseInputType::CreateRecord(
+                    collection_id.to_string(),
+                    serde_json::from_str(&content)?,
+                ));
+            }
+
+            bail!("Input type REC_CREATE is missing required argument for name.");
         }
         _ => bail!(
             "Invalid or unsupported input type for {}: {}",
