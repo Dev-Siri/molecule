@@ -21,10 +21,13 @@ jobs:
       - name: Build
         run: cargo build --release
 
+      - name: Rename binary
+        run: mv target/release/molecule target/release/molecule-${{ matrix.os }}
+
       - name: Upload binary
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            target/release/molecule
+            target/release/molecule-${{ matrix.os }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
